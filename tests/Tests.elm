@@ -17,6 +17,14 @@ expectParses input expected =
         Err err ->
             Expect.fail ("Failed to parse input: \"" ++ toString input ++ "\"\n" ++ toString err)
 
+expectInvalid : String -> Expect.Expectation
+expectInvalid input =
+    case Csv.parse input of
+        Ok res ->
+            Expect.fail ("Expected input to fail, but it parsed successfully: " ++ toString input)
+        Err _ ->
+            Expect.pass
+
 all : Test
 all =
     describe "CSV Parser"
@@ -42,6 +50,12 @@ all =
             , test "Quoted commas" <|
                 \() ->
                     expectParses "a,\"b,b\",c" { headers = ["a", "b,b", "c"], records = [] }
+            , test "Quotes with trailing spaces" <|
+                \() ->
+                    expectInvalid "\"a\" "
+            , test "Quotes with leading spaces" <|
+                \() ->
+                    expectInvalid "  \"a\""
             ]
         , describe "Row parsing"
             [ test "Multi-row input" <|

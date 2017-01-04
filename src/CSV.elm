@@ -7,6 +7,36 @@ This library does its best to support RFC 4180, however, many CSV inputs do not 
 1. The `\n` character may be used instead of `\r\n` for new-lines.
 2. The trailing new-line may be omitted.
 
+RFC 4180 grammar, for reference, with notes.
+
+The trailing newline is required, but we'll make it optional.
+
+    file = [header CRLF] record *(CRLF record) [CRLF]
+    header = name *(COMMA name)
+    record = field *(COMMA field)
+    name = field
+    field = (escaped / non-escaped)
+
+There is no room for spaces around the quotes.  The specification is that 
+
+    escaped = DQUOTE *(TEXTDATA / COMMA / CR / LF / 2DQUOTE) DQUOTE
+
+In this specification, fields that don't have quotes surrounding them cannot have a quote inside them because it is excluded from `TEXTDATA`.
+
+    non-escaped = *TEXTDATA
+    COMMA = %x2C
+    CR = %x0D ;as per section 6.1 of RFC 2234 [2]
+    DQUOTE =  %x22 ;as per section 6.1 of RFC 2234 [2]
+    LF = %x0A ;as per section 6.1 of RFC 2234 [2]
+
+The spec requires that new lines be `CR + LF` but we'll let them get away with just `LF` if they want..
+
+    CRLF = CR LF ;as per section 6.1 of RFC 2234 [2]
+
+All the printable characters minus the double-quote and comma, this is important above.
+
+    TEXTDATA =  %x20-21 / %x23-2B / %x2D-7E
+
 # Types
 @docs Csv
 
@@ -16,7 +46,7 @@ This library does its best to support RFC 4180, however, many CSV inputs do not 
 
 import String
 import Result
-import Combine exposing (Parser, (<*), (*>), (<*>), (<$), ($>), (<$>), (<|>))
+import Combine exposing (Parser, (<*), (*>), (<*>), (<$), ($>), (<$>), (<|>), (<?>))
 import Combine.Char exposing (char, noneOf)
 
 {-| Represents a CSV document.  All CSV documents are have a header row, even if that row is empty.
@@ -48,36 +78,6 @@ addTrailingCrlf str =
         else
             str
 
-{-
-   RFC 4180 grammar, for reference.
-
-   file = [header CRLF] record *(CRLF record) [CRLF]
-
-   header = name *(COMMA name)
-
-   record = field *(COMMA field)
-
-   name = field
-
-   field = (escaped / non-escaped)
-
-   escaped = DQUOTE *(TEXTDATA / COMMA / CR / LF / 2DQUOTE) DQUOTE
-
-   non-escaped = *TEXTDATA
-
-   COMMA = %x2C
-
-   CR = %x0D ;as per section 6.1 of RFC 2234 [2]
-
-   DQUOTE =  %x22 ;as per section 6.1 of RFC 2234 [2]
-
-   LF = %x0A ;as per section 6.1 of RFC 2234 [2]
-
-   CRLF = CR LF ;as per section 6.1 of RFC 2234 [2]
-
-   TEXTDATA =  %x20-21 / %x23-2B / %x2D-7E -- printable characters minus quotes.
--}
-
 comma : Parser s Char
 comma =
     char ','
@@ -98,6 +98,7 @@ lf =
 crlf : Parser s ()
 crlf =
     () <$ ((cr *> lf) <|> lf) -- Unix people don't do crlf
+        <?> "Expected newline."
 
 
 doubleDoubleQuote : Parser s Char
@@ -111,7 +112,9 @@ textData =
 
 nonEscaped : Parser s String
 nonEscaped =
-    Combine.many textData |> Combine.map String.fromList
+    Combine.many textData
+        |> Combine.map String.fromList
+        |> Combine.mapError (always [ "Expected non-escaped value." ])
 
 escaped : Parser s String
 escaped =
@@ -121,7 +124,8 @@ escaped =
         innerString =
             Combine.many innerChar |> Combine.map String.fromList
     in
-        doubleQuote *> innerString <* doubleQuote
+        (doubleQuote *> innerString <* doubleQuote)
+            |> Combine.mapError (always [ "Expected escaped value." ])
 
 field : Parser s String
 field =
@@ -141,7 +145,7 @@ record =
 file : Parser s Csv
 file =
     Csv <$> header
-        <* crlf
-        <*> Combine.many (record <* crlf)
+        <* (crlf <?> "Invalid header")
+        <*> Combine.many (record <* (crlf <?> "Invalid record"))
         <* Combine.end
 
