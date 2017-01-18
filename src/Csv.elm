@@ -4,7 +4,7 @@ module Csv exposing (Csv, parse)
 
 This library does its best to support RFC 4180, however, many CSV inputs do not strictly follow the standard.  There are two major deviations assumed in this library.
 
-1. The `\n` character may be used instead of `\r\n` for new-lines.
+1. The `\n` or `\r` character may be used instead of `\r\n` for line separators.
 2. The trailing new-line may be omitted.
 
 RFC 4180 grammar, for reference, with notes.
@@ -17,7 +17,7 @@ The trailing newline is required, but we'll make it optional.
     name = field
     field = (escaped / non-escaped)
 
-There is no room for spaces around the quotes.  The specification is that 
+There is no room for spaces around the quotes.  The specification is that
 
     escaped = DQUOTE *(TEXTDATA / COMMA / CR / LF / 2DQUOTE) DQUOTE
 
@@ -49,6 +49,7 @@ import Result
 import Combine exposing (Parser, (<*), (*>), (<*>), (<$), ($>), (<$>), (<|>), (<?>))
 import Combine.Char exposing (char, noneOf)
 
+
 {-| Represents a CSV document.  All CSV documents are have a header row, even if that row is empty.
 -}
 type alias Csv =
@@ -56,59 +57,76 @@ type alias Csv =
     , records : List (List String)
     }
 
+
 {-| Parse a CSV string into it's constituent fields.
 -}
 parse : String -> Result (List String) Csv
 parse =
-    addTrailingCrlf >> Combine.parse file >> Result.mapError thrd >> Result.map thrd
+    addTrailingLineSep >> Combine.parse file >> Result.mapError thrd >> Result.map thrd
+
 
 {-| Gets the third element of a tuple.
 -}
-thrd : (a, b, c) -> c
-thrd (_, _, c) =
+thrd : ( a, b, c ) -> c
+thrd ( _, _, c ) =
     c
 
-{-| Adds a trailing CRLF to a string if not present.
+
+{-| Adds a trailing line separator to a string if not present.
 -}
-addTrailingCrlf : String -> String
-addTrailingCrlf str =
-    if not (String.endsWith "\r\n" str || String.endsWith "\n" str)
-        then
-            str ++ "\r\n"
-        else
-            str
+addTrailingLineSep : String -> String
+addTrailingLineSep str =
+    if not (String.endsWith "\n" str || String.endsWith "\x0D" str) then
+        str ++ "\x0D\n"
+    else
+        str
+
 
 comma : Parser s Char
 comma =
     char ','
 
+
 doubleQuote : Parser s Char
 doubleQuote =
     char '"'
 
+
 cr : Parser s Char
 cr =
-    char '\r'
+    char '\x0D'
+
 
 lf : Parser s Char
 lf =
     char '\n'
 
+
+
 -- This should probably return \r\n, but I'm never going to actually use it.
-crlf : Parser s ()
-crlf =
-    () <$ ((cr *> lf) <|> lf) -- Unix people don't do crlf
-        <?> "Expected newline."
+
+
+lineSep : Parser s ()
+lineSep =
+    -- Prefer the multi-character code, but accept others.
+    ()
+        <$ ((cr *> lf) <|> cr <|> lf)
+        <?> "Expected new line."
 
 
 doubleDoubleQuote : Parser s Char
 doubleDoubleQuote =
     (doubleQuote *> doubleQuote)
 
+
+
 -- Grab all non-quote data.
+
+
 textData : Parser s Char
 textData =
-    noneOf ['"', ',', '\n', '\r']
+    noneOf [ '"', ',', '\n', '\x0D' ]
+
 
 nonEscaped : Parser s String
 nonEscaped =
@@ -116,36 +134,44 @@ nonEscaped =
         |> Combine.map String.fromList
         |> Combine.mapError (always [ "Expected non-escaped value." ])
 
+
 escaped : Parser s String
 escaped =
     let
         innerChar =
             Combine.choice [ textData, comma, cr, lf, doubleDoubleQuote ]
+
         innerString =
             Combine.many innerChar |> Combine.map String.fromList
     in
         (doubleQuote *> innerString <* doubleQuote)
             |> Combine.mapError (always [ "Expected escaped value." ])
 
+
 field : Parser s String
 field =
     Combine.choice [ escaped, nonEscaped ]
 
+
 name : Parser s String
-name = field
+name =
+    field
+
 
 header : Parser s (List String)
 header =
     Combine.sepBy comma name
 
+
 record : Parser s (List String)
 record =
     Combine.sepBy comma field
 
+
 file : Parser s Csv
 file =
-    Csv <$> header
-        <* (crlf <?> "Invalid header")
-        <*> Combine.many (record <* (crlf <?> "Invalid record"))
+    Csv
+        <$> header
+        <* (lineSep <?> "Unterminated header")
+        <*> Combine.many (record <* (lineSep <?> "Unterminated record"))
         <* Combine.end
-
