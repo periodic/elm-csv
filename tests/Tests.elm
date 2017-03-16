@@ -45,6 +45,9 @@ all =
             , test "Simple values" <|
                 \() ->
                     expectParses "a,1" { headers = [ "a", "1" ], records = [] }
+            , test "Special characters" <|
+                \() ->
+                    expectParses "< £200,Allieds" { headers = [ "< £200", "Allieds" ], records = [] }
             , test "Empty value" <|
                 \() ->
                     expectParses "a,,1" { headers = [ "a", "", "1" ], records = [] }
