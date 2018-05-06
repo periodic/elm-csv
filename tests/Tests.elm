@@ -81,7 +81,7 @@ all =
                     expectParses
                         "a,b,c\rd,e,f\rg,h,i\r"
                         { headers = [ "a", "b", "c" ], records = [ [ "d", "e", "f" ], [ "g", "h", "i" ] ] }
-            , test "CR only" <|
+            , test "CRNL only" <|
                 \() ->
                     expectParses
                         "a,b,c\r\nd,e,f\r\ng,h,i\r\n"
