@@ -1,4 +1,4 @@
-module Csv exposing (Csv, parse)
+module Csv exposing (Csv, parse, parseWith)
 
 {-| A parser for transforming CSV strings into usable input.
 
@@ -42,6 +42,7 @@ All the printable characters minus the double-quote and comma, this is important
 
 # Functions
 @docs parse
+@docs parseWith
 -}
 
 import String
@@ -57,13 +58,23 @@ type alias Csv =
     , records : List (List String)
     }
 
+type alias Config =
+    { fieldSep : Char
+    }
 
-{-| Parse a CSV string into it's constituent fields.
+{-| Parse a CSV string into it's constituent fields using COMMA as a field separator.
 -}
 parse : String -> Result (List String) Csv
-parse =
-    addTrailingLineSep >> Combine.parse file >> Result.mapError thrd >> Result.map thrd
+parse = parseWith ','
 
+{-| Parse a CSV string into it's constituent fields with a configurable field separator.
+-}
+parseWith : Char -> String -> Result (List String) Csv
+parseWith fieldSep =
+    let
+        config = { fieldSep = fieldSep }
+    in
+        addTrailingLineSep >> Combine.parse (file config) >> Result.mapError thrd >> Result.map thrd
 
 {-| Gets the third element of a tuple.
 -}
@@ -80,11 +91,6 @@ addTrailingLineSep str =
         str ++ "\x0D\n"
     else
         str
-
-
-comma : Parser s Char
-comma =
-    char ','
 
 
 doubleQuote : Parser s Char
@@ -123,23 +129,23 @@ doubleDoubleQuote =
 -- Grab all non-quote data.
 
 
-textData : Parser s Char
-textData =
-    noneOf [ '"', ',', '\n', '\x0D' ]
+textData : Config -> Parser s Char
+textData config =
+    noneOf [ '"', config.fieldSep , '\n', '\x0D' ]
 
 
-nonEscaped : Parser s String
-nonEscaped =
-    Combine.many textData
+nonEscaped : Config -> Parser s String
+nonEscaped config =
+    Combine.many (textData config)
         |> Combine.map String.fromList
         |> Combine.mapError (always [ "Expected non-escaped value." ])
 
 
-escaped : Parser s String
-escaped =
+escaped : Config -> Parser s String
+escaped config =
     let
         innerChar =
-            Combine.choice [ textData, comma, cr, lf, doubleDoubleQuote ]
+            Combine.choice [ textData config, char config.fieldSep, cr, lf, doubleDoubleQuote ]
 
         innerString =
             Combine.many innerChar |> Combine.map String.fromList
@@ -148,30 +154,29 @@ escaped =
             |> Combine.mapError (always [ "Expected escaped value." ])
 
 
-field : Parser s String
-field =
-    Combine.choice [ escaped, nonEscaped ]
+field : Config -> Parser s String
+field config =
+    Combine.choice [ escaped config, nonEscaped config ]
 
 
-name : Parser s String
+name : Config -> Parser s String
 name =
     field
 
 
-header : Parser s (List String)
-header =
-    Combine.sepBy comma name
+header : Config -> Parser s (List String)
+header = record
 
 
-record : Parser s (List String)
-record =
-    Combine.sepBy comma field
+record : Config -> Parser s (List String)
+record config =
+    Combine.sepBy (char config.fieldSep) (field config)
 
 
-file : Parser s Csv
-file =
+file : Config -> Parser s Csv
+file config =
     Csv
-        <$> header
+        <$> header config
         <* (lineSep <?> "Unterminated header")
-        <*> Combine.many (record <* (lineSep <?> "Unterminated record"))
+        <*> Combine.many (record config <* (lineSep <?> "Unterminated record"))
         <* Combine.end
