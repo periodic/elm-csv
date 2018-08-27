@@ -120,19 +120,17 @@ thrd ( _, _, c ) =
 
 
 
--- crs = "\u{000d}"
+crs = "\u{000d}"
 
 
-crs =
-    "placeholder"
+--crs = "placeholder"
 
 
 
--- crc = '\u{000D}'
+crc = '\u{000D}'
 
 
-crc =
-    'p'
+-- crc = 'p'
 
 
 {-| Adds a trailing line separator to a string if not present.
@@ -252,6 +250,7 @@ recordsHelper : List (List String) -> Parser (Step (List (List String)) (List (L
 recordsHelper records =
     oneOf
         [ succeed (\rec -> Loop (rec :: records))
+            |. lineSep
             |= record
         , succeed ()
             |> Parser.map (\_ -> Done (List.reverse records))
