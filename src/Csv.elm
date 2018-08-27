@@ -69,6 +69,7 @@ import Parser
         , Parser
         , Step(..)
         , andThen
+        , backtrackable
         , chompIf
         , chompWhile
         , float
@@ -76,7 +77,6 @@ import Parser
         , keyword
         , lazy
         , loop
-          --       , keep
         , oneOf
           --        , oneOrMore
           --       , repeat
@@ -123,7 +123,7 @@ thrd ( _, _, c ) =
 crs = "\u{000d}"
 
 
---crs = "placeholder"
+-- crs = "placeholder"
 
 
 
@@ -179,12 +179,11 @@ doubleDoubleQuote =
 
 
 
--- Grab all non-quote data.
 
 
 textData : Parser ()
 textData =
-    chompIf (\c -> not (List.member c [ '"', ',', '\n', crc ]))
+    chompIf textChar 
 
 
 textChar : Char -> Bool
@@ -233,9 +232,10 @@ name =
 recordHelper : List String -> Parser (Step (List String) (List String))
 recordHelper strs =
     oneOf
-        [ succeed (\str -> Loop (str :: strs))
-            |= field
-            |. comma
+        [ backtrackable <|
+            succeed (\str -> Loop (str :: strs))
+                |= field
+                |. comma
         , succeed (\str -> Done (List.reverse (str :: strs)))
             |= field
         ]
