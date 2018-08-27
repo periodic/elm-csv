@@ -83,10 +83,6 @@ import Result
 import String
 
 
--- import Combine exposing (Parser, (<*), (*>), (<*>), (<$), ($>), (<$>), (<|>), (<?>))
--- import Combine.Char exposing (char, noneOf)
-
-
 {-| Represents a CSV document. All CSV documents are have a header row, even if that row is empty.
 -}
 type alias Csv =
