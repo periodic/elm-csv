@@ -1,4 +1,4 @@
-module Csv exposing (..)
+module Csv exposing (Csv, parse)
 
 {-| A parser for transforming CSV strings into usable input.
 
@@ -59,9 +59,6 @@ All the printable characters minus the double-quote and comma, this is important
 
 -}
 
--- exposing (Csv, parse)
-
-import Hex
 import Parser
     exposing
         ( (|.)
@@ -78,13 +75,9 @@ import Parser
         , lazy
         , loop
         , oneOf
-          --        , oneOrMore
-          --       , repeat
         , run
-          --      , source
         , succeed
         , symbol
-          --     , zeroOrMore
         )
 import Result
 import String
@@ -178,12 +171,9 @@ doubleDoubleQuote =
     doubleQuote |. doubleQuote
 
 
-
-
-
 textData : Parser ()
 textData =
-    chompIf textChar 
+    chompIf textChar
 
 
 textChar : Char -> Bool
@@ -198,8 +188,10 @@ nonEscaped =
 
 innerChar : Parser String
 innerChar =
-    getChompedString
-        (oneOf [ textData, comma, cr, lf, doubleDoubleQuote ])
+    Parser.map (String.replace "\"\"" "\"") <|
+        backtrackable <|
+            getChompedString
+                (oneOf [ textData, comma, cr, lf, doubleDoubleQuote ])
 
 
 innerString : List String -> Parser (Step (List String) String)
