@@ -155,8 +155,8 @@ lineSep : Parser ()
 lineSep =
     -- Prefer the multi-character code, but accept others.
     oneOf
-        [ cr
-        , cr |. lf
+        [ backtrackable <| cr |. lf
+        , cr
         , lf
         ]
 
@@ -225,6 +225,7 @@ recordHelper strs =
                 |. comma
         , succeed (\str -> Done (List.reverse (str :: strs)))
             |= field
+            |. lineSep
         ]
 
 
@@ -237,7 +238,6 @@ recordsHelper : List (List String) -> Parser (Step (List (List String)) (List (L
 recordsHelper records =
     oneOf
         [ succeed (\rec -> Loop (rec :: records))
-            |. lineSep
             |= record
         , succeed ()
             |> Parser.map (\_ -> Done (List.reverse records))
