@@ -92,9 +92,8 @@ type alias Csv =
 
 
 
-{- | Parse a CSV string into it's constituent fields. -}
-
-
+{- | Parse a CSV string into it's constituent fields. 
+-}
 parse : String -> Result (List Parser.DeadEnd) Csv
 parse =
     addTrailingLineSep
