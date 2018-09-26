@@ -7,7 +7,8 @@
         "src"
     ],
     "exposed-modules": [
-        "Csv"
+        "Csv",
+        "Csv.Decode"
     ],
     "dependencies": {
         "Bogdanp/elm-combine": "3.1.1 <= v < 4.0.0",
