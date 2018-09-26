@@ -5,9 +5,11 @@ import Expect
 import Csv
 
 
-expectParses : String -> Csv.Csv -> Expect.Expectation
-expectParses input expected =
-    case Csv.parse input of
+type alias Parser = String -> Result (List String) Csv.Csv
+
+expectParserParses : Parser -> String -> Csv.Csv -> Expect.Expectation
+expectParserParses parse input expected =
+    case parse input of
         Ok res ->
             if res == expected then
                 Expect.pass
@@ -24,6 +26,11 @@ expectParses input expected =
         Err err ->
             Expect.fail ("Failed to parse input: \"" ++ toString input ++ "\"\n" ++ toString err)
 
+expectParses : String -> Csv.Csv -> Expect.Expectation
+expectParses = expectParserParses Csv.parse
+
+expectParsesWith : Char -> String -> Csv.Csv -> Expect.Expectation
+expectParsesWith fieldSep = expectParserParses <| Csv.parseWith fieldSep
 
 expectInvalid : String -> Expect.Expectation
 expectInvalid input =
@@ -81,7 +88,7 @@ all =
                     expectParses
                         "a,b,c\rd,e,f\rg,h,i\r"
                         { headers = [ "a", "b", "c" ], records = [ [ "d", "e", "f" ], [ "g", "h", "i" ] ] }
-            , test "CR only" <|
+            , test "CRNL only" <|
                 \() ->
                     expectParses
                         "a,b,c\r\nd,e,f\r\ng,h,i\r\n"
@@ -102,5 +109,8 @@ all =
             , test "Trailing newline" <|
                 \() ->
                     expectParses "a\nb\n" { headers = [ "a" ], records = [ [ "b" ] ] }
+            , test "Tabulated fields" <|
+                \() ->
+                    expectParsesWith '\t' "a\tb\naa\tbb" { headers = [ "a", "b" ], records = [ [ "aa", "bb" ] ] }
             ]
         ]
