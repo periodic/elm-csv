@@ -139,10 +139,10 @@ all =
             , test "Tabulated fields 2" <|
                 \() ->
                     expectParsesWith '\t' "a,b\naa,bb" { headers = [ "a,b" ], records = [ [ "aa,bb" ] ] }
-            , test "Tabulated fields 3" <|
+            , test "Parsewith ','" <|
                 \() ->
                     expectParsesWith ',' "a,b\naa,bb" { headers = [ "a", "b" ], records = [ [ "aa", "bb" ] ] }
-            , test "Tabulated fields 4" <|
+            , test "Parsewith '$'" <|
                 \() ->
                     expectParsesWith '$' "a$b\naa$bb" { headers = [ "a", "b" ], records = [ [ "aa", "bb" ] ] }
             ]
