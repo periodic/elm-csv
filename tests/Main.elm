@@ -1,13 +1,11 @@
-port module Main exposing (..)
+module Main exposing (suite)
 
-import Tests
-import Test.Runner.Node exposing (run, TestProgram)
-import Json.Encode exposing (Value)
-
-
-main : TestProgram
-main =
-    run emit Tests.all
+import Expect exposing (Expectation)
+import Fuzz exposing (Fuzzer, int, list, string)
+import Test exposing (..)
+import Tests exposing (..)
 
 
-port emit : ( String, Value ) -> Cmd msg
+suite : Test
+suite =
+    Tests.all
