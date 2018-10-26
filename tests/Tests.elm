@@ -2,12 +2,17 @@ module Tests exposing (all, expectInvalid, expectParses)
 
 import Csv exposing (Csv)
 import Expect
+import Parser exposing (Parser)
 import Test exposing (..)
 
 
-expectParses : String -> Csv.Csv -> Expect.Expectation
-expectParses input expected =
-    case Csv.parse input of
+type alias CsvParser =
+    String -> Result (List Parser.DeadEnd) Csv.Csv
+
+
+expectParserParses : CsvParser -> String -> Csv.Csv -> Expect.Expectation
+expectParserParses parser input expected =
+    case parser input of
         Ok res ->
             if res == expected then
                 Expect.pass
@@ -24,6 +29,16 @@ expectParses input expected =
 
         Err err ->
             Expect.fail ("Failed to parse input: \"" ++ input)
+
+
+expectParses : String -> Csv.Csv -> Expect.Expectation
+expectParses =
+    expectParserParses Csv.parse
+
+
+expectParsesWith : Char -> String -> Csv.Csv -> Expect.Expectation
+expectParsesWith fieldSep =
+    expectParserParses <| Csv.parseWith fieldSep
 
 
 csvToString : Csv -> String
@@ -116,5 +131,8 @@ all =
             , test "Trailing newline" <|
                 \() ->
                     expectParses "a\nb\n" { headers = [ "a" ], records = [ [ "b" ] ] }
+            , test "Tabulated fields" <|
+                \() ->
+                    expectParsesWith '\t' "a\tb\naa\tbb" { headers = [ "a", "b" ], records = [ [ "aa", "bb" ] ] }
             ]
         ]

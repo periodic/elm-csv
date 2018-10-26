@@ -1,4 +1,8 @@
-module Csv exposing (Csv, parse)
+module Csv exposing
+    ( Csv
+    , parse
+    , parseWith
+    )
 
 {-| A parser for transforming CSV strings into usable input.
 
@@ -92,12 +96,22 @@ type alias Csv =
 
 
 
-{- | Parse a CSV string into it's constituent fields. 
--}
+{- | Parse a CSV string into it's constituent fields. -}
+
+
 parse : String -> Result (List Parser.DeadEnd) Csv
-parse =
+parse s =
+    parseWith ',' s
+
+
+
+{- | Parse a CSV string into it's constituent fields, using Char as separator. -}
+
+
+parseWith : Char -> String -> Result (List Parser.DeadEnd) Csv
+parseWith c =
     addTrailingLineSep
-        >> Parser.run file
+        >> Parser.run (file c)
 
 
 {-| Gets the third element of a tuple.
@@ -107,15 +121,17 @@ thrd ( _, _, c ) =
     c
 
 
+crs =
+    "\u{000D}"
 
-crs = "\u{000d}"
 
 
 -- crs = "placeholder"
 
 
+crc =
+    '\u{000D}'
 
-crc = '\u{000D}'
 
 
 -- crc = 'p'
@@ -127,6 +143,7 @@ addTrailingLineSep : String -> String
 addTrailingLineSep str =
     if not (String.endsWith "\n" str || String.endsWith crs str) then
         str ++ crs ++ "\n"
+
     else
         str
 
@@ -216,36 +233,36 @@ name =
     field
 
 
-recordHelper : List String -> Parser (Step (List String) (List String))
-recordHelper strs =
+recordHelper : Char -> List String -> Parser (Step (List String) (List String))
+recordHelper sepChar strs =
     oneOf
         [ backtrackable <|
             succeed (\str -> Loop (str :: strs))
                 |= field
-                |. comma
+                |. symbol (String.fromChar sepChar)
         , succeed (\str -> Done (List.reverse (str :: strs)))
             |= field
             |. lineSep
         ]
 
 
-record : Parser (List String)
-record =
-    loop [] recordHelper
+record : Char -> Parser (List String)
+record sepChar =
+    loop [] (recordHelper sepChar)
 
 
-recordsHelper : List (List String) -> Parser (Step (List (List String)) (List (List String)))
-recordsHelper records =
+recordsHelper : Char -> List (List String) -> Parser (Step (List (List String)) (List (List String)))
+recordsHelper sepChar records =
     oneOf
         [ succeed (\rec -> Loop (rec :: records))
-            |= record
+            |= record sepChar
         , succeed ()
             |> Parser.map (\_ -> Done (List.reverse records))
         ]
 
 
-file : Parser Csv
-file =
+file : Char -> Parser Csv
+file sepChar =
     succeed Csv
-        |= record
-        |= loop [] recordsHelper
+        |= record sepChar
+        |= loop [] (recordsHelper sepChar)
