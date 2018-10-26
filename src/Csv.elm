@@ -64,16 +64,6 @@ All the printable characters minus the double-quote and comma, this is important
 
 -}
 
-{-
-   module Csv exposing
-       ( Csv
-       , parse
-       , parseWith
-       )
-
-
--}
-
 import Parser
     exposing
         ( (|.)
@@ -106,19 +96,15 @@ type alias Csv =
     }
 
 
-
-{- | Parse a CSV string into it's constituent fields. -}
-
-
+{-| Parse a CSV string into it's constituent fields, using comma for separator.
+-}
 parse : String -> Result (List Parser.DeadEnd) Csv
 parse s =
     parseWith ',' s
 
 
-
-{- | Parse a CSV string into it's constituent fields, using Char as separator. -}
-
-
+{-| Parse a CSV string into it's constituent fields, using the passed Char as separator.
+-}
 parseWith : Char -> String -> Result (List Parser.DeadEnd) Csv
 parseWith c =
     addTrailingLineSep
