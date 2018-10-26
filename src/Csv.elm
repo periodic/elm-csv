@@ -60,6 +60,17 @@ All the printable characters minus the double-quote and comma, this is important
 # Functions
 
 @docs parse
+@docs parseWith
+
+-}
+
+{-
+   module Csv exposing
+       ( Csv
+       , parse
+       , parseWith
+       )
+
 
 -}
 
@@ -183,54 +194,54 @@ doubleDoubleQuote =
     doubleQuote |. doubleQuote
 
 
-textData : Parser ()
-textData =
-    chompIf textChar
+textData : Char -> Parser ()
+textData sepChar =
+    chompIf <| textChar sepChar
 
 
-textChar : Char -> Bool
-textChar c =
-    not (List.member c [ '"', ',', '\n', crc ])
+textChar : Char -> Char -> Bool
+textChar sepChar c =
+    not (List.member c [ '"', sepChar, '\n', crc ])
 
 
-nonEscaped : Parser String
-nonEscaped =
-    getChompedString (chompWhile textChar)
+nonEscaped : Char -> Parser String
+nonEscaped sepChar =
+    getChompedString (chompWhile (textChar sepChar))
 
 
-innerChar : Parser String
-innerChar =
+innerChar : Char -> Parser String
+innerChar sepChar =
     Parser.map (String.replace "\"\"" "\"") <|
         backtrackable <|
             getChompedString
-                (oneOf [ textData, comma, cr, lf, doubleDoubleQuote ])
+                (oneOf [ textData sepChar, comma, cr, lf, doubleDoubleQuote ])
 
 
-innerString : List String -> Parser (Step (List String) String)
-innerString strs =
+innerString : Char -> List String -> Parser (Step (List String) String)
+innerString sepChar strs =
     oneOf
-        [ succeed (\str -> Loop (str :: strs)) |= innerChar
+        [ succeed (\str -> Loop (str :: strs)) |= innerChar sepChar
         , succeed ()
             |> Parser.map (\_ -> Done (String.concat (List.reverse strs)))
         ]
 
 
-escaped : Parser String
-escaped =
+escaped : Char -> Parser String
+escaped sepChar =
     succeed identity
         |. doubleQuote
-        |= loop [] innerString
+        |= loop [] (innerString sepChar)
         |. doubleQuote
 
 
-field : Parser String
-field =
-    oneOf [ escaped, nonEscaped ]
+field : Char -> Parser String
+field sepChar =
+    oneOf [ escaped sepChar, nonEscaped sepChar ]
 
 
-name : Parser String
-name =
-    field
+name : Char -> Parser String
+name sepChar =
+    field sepChar
 
 
 recordHelper : Char -> List String -> Parser (Step (List String) (List String))
@@ -238,10 +249,10 @@ recordHelper sepChar strs =
     oneOf
         [ backtrackable <|
             succeed (\str -> Loop (str :: strs))
-                |= field
+                |= field sepChar
                 |. symbol (String.fromChar sepChar)
         , succeed (\str -> Done (List.reverse (str :: strs)))
-            |= field
+            |= field sepChar
             |. lineSep
         ]
 

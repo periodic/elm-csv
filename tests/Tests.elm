@@ -28,7 +28,7 @@ expectParserParses parser input expected =
                     )
 
         Err err ->
-            Expect.fail ("Failed to parse input: \"" ++ input)
+            Expect.fail ("Failed to parse input: \"" ++ input ++ "\"")
 
 
 expectParses : String -> Csv.Csv -> Expect.Expectation
@@ -44,10 +44,12 @@ expectParsesWith fieldSep =
 csvToString : Csv -> String
 csvToString csv =
     String.concat <|
-        [ String.concat csv.headers
+        [ String.concat (List.map (\hd -> "'" ++ hd ++ "'") csv.headers)
         , "\n"
         ]
-            ++ List.map (\recs -> String.concat (recs ++ [ "\n" ])) csv.records
+            ++ List.map
+                (\recs -> String.concat (List.map (\f -> "'" ++ f ++ "'") recs ++ [ "\n" ]))
+                csv.records
 
 
 
@@ -134,5 +136,14 @@ all =
             , test "Tabulated fields" <|
                 \() ->
                     expectParsesWith '\t' "a\tb\naa\tbb" { headers = [ "a", "b" ], records = [ [ "aa", "bb" ] ] }
+            , test "Tabulated fields 2" <|
+                \() ->
+                    expectParsesWith '\t' "a,b\naa,bb" { headers = [ "a,b" ], records = [ [ "aa,bb" ] ] }
+            , test "Tabulated fields 3" <|
+                \() ->
+                    expectParsesWith ',' "a,b\naa,bb" { headers = [ "a", "b" ], records = [ [ "aa", "bb" ] ] }
+            , test "Tabulated fields 4" <|
+                \() ->
+                    expectParsesWith '$' "a$b\naa$bb" { headers = [ "a", "b" ], records = [ [ "aa", "bb" ] ] }
             ]
         ]
