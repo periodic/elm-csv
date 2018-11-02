@@ -122,16 +122,8 @@ crs =
     "\u{000D}"
 
 
-
--- crs = "placeholder"
-
-
 crc =
     '\u{000D}'
-
-
-
--- crc = 'p'
 
 
 {-| Adds a trailing line separator to a string if not present.
