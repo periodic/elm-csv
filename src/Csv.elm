@@ -88,7 +88,7 @@ import Result
 import String
 
 
-{-| Represents a CSV document. All CSV documents are have a header row, even if that row is empty.
+{-| Represents a CSV document. All CSV documents have a header row, even if that row is empty.
 -}
 type alias Csv =
     { headers : List String
@@ -118,10 +118,16 @@ thrd ( _, _, c ) =
     c
 
 
+{-| carriage return string
+-}
+crs : String
 crs =
     "\u{000D}"
 
 
+{-| carriage return character
+-}
+crc : Char
 crc =
     '\u{000D}'
 
