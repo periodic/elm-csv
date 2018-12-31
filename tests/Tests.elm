@@ -1,42 +1,66 @@
-module Tests exposing (..)
+module Tests exposing (all, expectInvalid, expectParses)
 
-import Test exposing (..)
+import Csv exposing (Csv)
 import Expect
-import Csv
+import Parser exposing (Parser)
+import Test exposing (..)
 
 
-type alias Parser = String -> Result (List String) Csv.Csv
+type alias CsvParser =
+    String -> Result (List Parser.DeadEnd) Csv.Csv
 
-expectParserParses : Parser -> String -> Csv.Csv -> Expect.Expectation
-expectParserParses parse input expected =
-    case parse input of
+
+expectParserParses : CsvParser -> String -> Csv.Csv -> Expect.Expectation
+expectParserParses parser input expected =
+    case parser input of
         Ok res ->
             if res == expected then
                 Expect.pass
+
             else
                 Expect.fail
                     ("Parse is incorrect.\n"
                         ++ "Expected: "
-                        ++ toString expected
+                        ++ csvToString expected
                         ++ "\n"
                         ++ "Actual: "
-                        ++ toString res
+                        ++ csvToString res
                     )
 
         Err err ->
-            Expect.fail ("Failed to parse input: \"" ++ toString input ++ "\"\n" ++ toString err)
+            Expect.fail ("Failed to parse input: \"" ++ input ++ "\"")
+
 
 expectParses : String -> Csv.Csv -> Expect.Expectation
-expectParses = expectParserParses Csv.parse
+expectParses =
+    expectParserParses Csv.parse
+
 
 expectParsesWith : Char -> String -> Csv.Csv -> Expect.Expectation
-expectParsesWith fieldSep = expectParserParses <| Csv.parseWith fieldSep
+expectParsesWith fieldSep =
+    expectParserParses <| Csv.parseWith fieldSep
+
+
+csvToString : Csv -> String
+csvToString csv =
+    String.concat <|
+        [ String.concat (List.map (\hd -> "'" ++ hd ++ "'") csv.headers)
+        , "\n"
+        ]
+            ++ List.map
+                (\recs -> String.concat (List.map (\f -> "'" ++ f ++ "'") recs ++ [ "\n" ]))
+                csv.records
+
+
+
+-- ++ "\"\n" ++ toString err)
+
 
 expectInvalid : String -> Expect.Expectation
 expectInvalid input =
     case Csv.parse input of
         Ok res ->
-            Expect.fail ("Expected input to fail, but it parsed successfully: " ++ toString input)
+            Expect.fail ("Expected input to fail, but it parsed successfully: " ++ input)
 
         Err _ ->
             Expect.pass
@@ -54,7 +78,7 @@ all =
                     expectParses "a,1" { headers = [ "a", "1" ], records = [] }
             , test "Special characters" <|
                 \() ->
-                    expectParses "< £200,Allieds" { headers = [ "< £200", "Allieds" ], records = [] }
+                    expectParses "< £200,Allied\u{0092}s" { headers = [ "< £200", "Allied\u{0092}s" ], records = [] }
             , test "Empty value" <|
                 \() ->
                     expectParses "a,,1" { headers = [ "a", "", "1" ], records = [] }
@@ -83,20 +107,20 @@ all =
                     expectParses
                         "a,b,c\nd,e,f\ng,h,i\n"
                         { headers = [ "a", "b", "c" ], records = [ [ "d", "e", "f" ], [ "g", "h", "i" ] ] }
-            , test "CR only" <|
+            , test "CR only 1" <|
                 \() ->
                     expectParses
-                        "a,b,c\rd,e,f\rg,h,i\r"
+                        "a,b,c\u{000D}d,e,f\u{000D}g,h,i\u{000D}"
                         { headers = [ "a", "b", "c" ], records = [ [ "d", "e", "f" ], [ "g", "h", "i" ] ] }
-            , test "CRNL only" <|
+            , test "CR only 2" <|
                 \() ->
                     expectParses
-                        "a,b,c\r\nd,e,f\r\ng,h,i\r\n"
+                        "a,b,c\u{000D}\nd,e,f\u{000D}\ng,h,i\u{000D}\n"
                         { headers = [ "a", "b", "c" ], records = [ [ "d", "e", "f" ], [ "g", "h", "i" ] ] }
             , test "Mixed" <|
                 \() ->
                     expectParses
-                        "a,b,c\rd,e,f\ng,h,i\r\n"
+                        "a,b,c\u{000D}d,e,f\ng,h,i\u{000D}\n"
                         { headers = [ "a", "b", "c" ], records = [ [ "d", "e", "f" ], [ "g", "h", "i" ] ] }
             ]
         , describe "Row parsing"
@@ -112,5 +136,14 @@ all =
             , test "Tabulated fields" <|
                 \() ->
                     expectParsesWith '\t' "a\tb\naa\tbb" { headers = [ "a", "b" ], records = [ [ "aa", "bb" ] ] }
+            , test "Tabulated fields 2" <|
+                \() ->
+                    expectParsesWith '\t' "a,b\naa,bb" { headers = [ "a,b" ], records = [ [ "aa,bb" ] ] }
+            , test "Parsewith ','" <|
+                \() ->
+                    expectParsesWith ',' "a,b\naa,bb" { headers = [ "a", "b" ], records = [ [ "aa", "bb" ] ] }
+            , test "Parsewith '$'" <|
+                \() ->
+                    expectParsesWith '$' "a$b\naa$bb" { headers = [ "a", "b" ], records = [ [ "aa", "bb" ] ] }
             ]
         ]

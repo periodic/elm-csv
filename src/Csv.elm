@@ -1,25 +1,39 @@
-module Csv exposing (Csv, parse, parseWith)
+module Csv exposing
+    ( Csv
+    , parse
+    , parseWith
+    )
 
 {-| A parser for transforming CSV strings into usable input.
 
-This library does its best to support RFC 4180, however, many CSV inputs do not strictly follow the standard.  There are two major deviations assumed in this library.
+This library does its best to support RFC 4180, however, many CSV inputs do not strictly follow the standard. There are two major deviations assumed in this library.
 
-1. The `\n` or `\r` character may be used instead of `\r\n` for line separators.
-2. The trailing new-line may be omitted.
+1.  The `\n` or `\r` character may be used instead of `\r\n` for line separators.
+2.  The trailing new-line may be omitted.
 
 RFC 4180 grammar, for reference, with notes.
 
 The trailing newline is required, but we'll make it optional.
 
-    file = [header CRLF] record *(CRLF record) [CRLF]
-    header = name *(COMMA name)
-    record = field *(COMMA field)
-    name = field
-    field = (escaped / non-escaped)
+    file =
+        [ header CRLF ] record * CRLF record [ CRLF ]
 
-There is no room for spaces around the quotes.  The specification is that
+    header =
+        name * COMMA name
 
-    escaped = DQUOTE *(TEXTDATA / COMMA / CR / LF / 2DQUOTE) DQUOTE
+    record =
+        field * COMMA field
+
+    name =
+        field
+
+    field =
+        escaped / non - escaped
+
+There is no room for spaces around the quotes. The specification is that
+
+    escaped =
+        DQUOTE * (TEXTDATA / COMMA / CR / LF / 2 DQUOTE) DQUOTE
 
 In this specification, fields that don't have quotes surrounding them cannot have a quote inside them because it is excluded from `TEXTDATA`.
 
@@ -37,44 +51,65 @@ All the printable characters minus the double-quote and comma, this is important
 
     TEXTDATA =  %x20-21 / %x23-2B / %x2D-7E
 
+
 # Types
+
 @docs Csv
 
+
 # Functions
+
 @docs parse
 @docs parseWith
+
 -}
 
-import String
+import Parser
+    exposing
+        ( (|.)
+        , (|=)
+        , Parser
+        , Step(..)
+        , andThen
+        , backtrackable
+        , chompIf
+        , chompWhile
+        , float
+        , getChompedString
+        , keyword
+        , lazy
+        , loop
+        , oneOf
+        , run
+        , succeed
+        , symbol
+        )
 import Result
-import Combine exposing (Parser, (<*), (*>), (<*>), (<$), ($>), (<$>), (<|>), (<?>))
-import Combine.Char exposing (char, noneOf)
+import String
 
 
-{-| Represents a CSV document.  All CSV documents are have a header row, even if that row is empty.
+{-| Represents a CSV document. All CSV documents have a header row, even if that row is empty.
 -}
 type alias Csv =
     { headers : List String
     , records : List (List String)
     }
 
-type alias Config =
-    { fieldSep : Char
-    }
 
-{-| Parse a CSV string into it's constituent fields using COMMA as a field separator.
+{-| Parse a CSV string into it's constituent fields, using comma for separator.
 -}
-parse : String -> Result (List String) Csv
-parse = parseWith ','
+parse : String -> Result (List Parser.DeadEnd) Csv
+parse s =
+    parseWith ',' s
 
-{-| Parse a CSV string into it's constituent fields with a configurable field separator.
+
+{-| Parse a CSV string into it's constituent fields, using the passed Char as separator.
 -}
-parseWith : Char -> String -> Result (List String) Csv
-parseWith fieldSep =
-    let
-        config = { fieldSep = fieldSep }
-    in
-        addTrailingLineSep >> Combine.parse (file config) >> Result.mapError thrd >> Result.map thrd
+parseWith : Char -> String -> Result (List Parser.DeadEnd) Csv
+parseWith c =
+    addTrailingLineSep
+        >> Parser.run (file c)
+
 
 {-| Gets the third element of a tuple.
 -}
@@ -83,100 +118,146 @@ thrd ( _, _, c ) =
     c
 
 
+{-| carriage return string
+-}
+crs : String
+crs =
+    "\u{000D}"
+
+
+{-| carriage return character
+-}
+crc : Char
+crc =
+    '\u{000D}'
+
+
 {-| Adds a trailing line separator to a string if not present.
 -}
 addTrailingLineSep : String -> String
 addTrailingLineSep str =
-    if not (String.endsWith "\n" str || String.endsWith "\x0D" str) then
-        str ++ "\x0D\n"
+    if not (String.endsWith "\n" str || String.endsWith crs str) then
+        str ++ crs ++ "\n"
+
     else
         str
 
 
-doubleQuote : Parser s Char
+comma : Parser ()
+comma =
+    symbol ","
+
+
+doubleQuote : Parser ()
 doubleQuote =
-    char '"'
+    symbol "\""
 
 
-cr : Parser s Char
+cr : Parser ()
 cr =
-    char '\x0D'
+    symbol crs
 
 
-lf : Parser s Char
+lf : Parser ()
 lf =
-    char '\n'
+    symbol "\n"
 
 
-
--- This should probably return \r\n, but I'm never going to actually use it.
-
-
-lineSep : Parser s ()
+lineSep : Parser ()
 lineSep =
     -- Prefer the multi-character code, but accept others.
-    ()
-        <$ ((cr *> lf) <|> cr <|> lf)
-        <?> "Expected new line."
+    oneOf
+        [ backtrackable <| cr |. lf
+        , cr
+        , lf
+        ]
 
 
-doubleDoubleQuote : Parser s Char
+doubleDoubleQuote : Parser ()
 doubleDoubleQuote =
-    (doubleQuote *> doubleQuote)
+    doubleQuote |. doubleQuote
 
 
-
--- Grab all non-quote data.
-
-
-textData : Config -> Parser s Char
-textData config =
-    noneOf [ '"', config.fieldSep , '\n', '\x0D' ]
+textData : Char -> Parser ()
+textData sepChar =
+    chompIf <| textChar sepChar
 
 
-nonEscaped : Config -> Parser s String
-nonEscaped config =
-    Combine.many (textData config)
-        |> Combine.map String.fromList
-        |> Combine.mapError (always [ "Expected non-escaped value." ])
+textChar : Char -> Char -> Bool
+textChar sepChar c =
+    not (List.member c [ '"', sepChar, '\n', crc ])
 
 
-escaped : Config -> Parser s String
-escaped config =
-    let
-        innerChar =
-            Combine.choice [ textData config, char config.fieldSep, cr, lf, doubleDoubleQuote ]
-
-        innerString =
-            Combine.many innerChar |> Combine.map String.fromList
-    in
-        (doubleQuote *> innerString <* doubleQuote)
-            |> Combine.mapError (always [ "Expected escaped value." ])
+nonEscaped : Char -> Parser String
+nonEscaped sepChar =
+    getChompedString (chompWhile (textChar sepChar))
 
 
-field : Config -> Parser s String
-field config =
-    Combine.choice [ escaped config, nonEscaped config ]
+innerChar : Char -> Parser String
+innerChar sepChar =
+    Parser.map (String.replace "\"\"" "\"") <|
+        backtrackable <|
+            getChompedString
+                (oneOf [ textData sepChar, comma, cr, lf, doubleDoubleQuote ])
 
 
-name : Config -> Parser s String
-name =
-    field
+innerString : Char -> List String -> Parser (Step (List String) String)
+innerString sepChar strs =
+    oneOf
+        [ succeed (\str -> Loop (str :: strs)) |= innerChar sepChar
+        , succeed ()
+            |> Parser.map (\_ -> Done (String.concat (List.reverse strs)))
+        ]
 
 
-header : Config -> Parser s (List String)
-header = record
+escaped : Char -> Parser String
+escaped sepChar =
+    succeed identity
+        |. doubleQuote
+        |= loop [] (innerString sepChar)
+        |. doubleQuote
 
 
-record : Config -> Parser s (List String)
-record config =
-    Combine.sepBy (char config.fieldSep) (field config)
+field : Char -> Parser String
+field sepChar =
+    oneOf [ escaped sepChar, nonEscaped sepChar ]
 
 
-file : Config -> Parser s Csv
-file config =
-    Csv
-        <$> header config
-        <* (lineSep <?> "Unterminated header")
-        <*> Combine.many (record config <* (lineSep <?> "Unterminated record"))
-        <* Combine.end
+name : Char -> Parser String
+name sepChar =
+    field sepChar
+
+
+recordHelper : Char -> List String -> Parser (Step (List String) (List String))
+recordHelper sepChar strs =
+    oneOf
+        [ backtrackable <|
+            succeed (\str -> Loop (str :: strs))
+                |= field sepChar
+                |. symbol (String.fromChar sepChar)
+        , succeed (\str -> Done (List.reverse (str :: strs)))
+            |= field sepChar
+            |. lineSep
+        ]
+
+
+record : Char -> Parser (List String)
+record sepChar =
+    loop [] (recordHelper sepChar)
+
+
+recordsHelper : Char -> List (List String) -> Parser (Step (List (List String)) (List (List String)))
+recordsHelper sepChar records =
+    oneOf
+        [ succeed (\rec -> Loop (rec :: records))
+            |= record sepChar
+        , succeed ()
+            |> Parser.map (\_ -> Done (List.reverse records))
+        ]
+
+
+file : Char -> Parser Csv
+file sepChar =
+    succeed Csv
+        |= record sepChar
+        |= loop [] (recordsHelper sepChar)
